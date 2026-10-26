@@ -1,1 +1,0 @@
-Gradle Wrapper JAR and scripts are intentionally not fabricated. Open the project in Android Studio and use its configured Gradle, or generate a wrapper from a trusted Gradle installation with: gradle wrapper --gradle-version 8.7
