@@ -1,13 +1,10 @@
-
-name: Android Build
+name: Saddam Player Android Build
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -15,9 +12,8 @@ permissions:
 
 jobs:
   build:
-    name: Build LocalVideoStudio
+    name: Build Saddam Player APK
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,6 +36,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: LocalVideoStudio-debug-apk
+          name: Saddam-Player-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
