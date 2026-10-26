@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.LocalVideoStudio" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- تخصيص ألوان الثيم هنا حسب الحاجة -->
+    </style>
+</resources>
