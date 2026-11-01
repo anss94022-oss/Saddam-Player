@@ -206,7 +206,7 @@ fun MainScreen(
                     onQueryChange = vm::setQuery,
                     onSortChange = vm::setSort,
                     onViewModeChange = vm::setViewMode,
-                    onRefresh = { vm.refresh() },
+                    onRefresh = { vm.refresh(force = true) },
                     onAddFolder = { folderLauncher.launch(null) },
                     onGrantPermission = {
                         permissionLauncher.launch(

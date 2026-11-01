@@ -115,26 +115,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             settings.map { it.customFolders }
                 .distinctUntilChanged()
-                .collect { folders -> refresh(folders) }
+                .collect { folders -> refresh(folders, force = true) }
         }
     }
+
+    private var lastGranted: Boolean? = null
+    private var hasLoadedOnce = false
 
     fun onPermissionResult(granted: Boolean) {
+        val changed = lastGranted != granted
+        lastGranted = granted
         _hasPermission.value = granted
-        viewModelScope.launch {
-            refresh(settings.value.customFolders)
+        // لا نعيد مسح المكتبة في كل مرة يعود المستخدم من المشغل — فقط عند تغيّر الصلاحية أول مرة.
+        if (granted && (changed || !hasLoadedOnce)) {
+            refresh(force = true)
         }
     }
 
-    fun refresh(customFolderUris: List<String> = settings.value.customFolders) {
+    fun refresh(customFolderUris: List<String> = settings.value.customFolders, force: Boolean = false) {
         viewModelScope.launch {
-            _loading.value = true
+            if (!force && hasLoadedOnce) return@launch
+            _loading.value = !hasLoadedOnce
             val names = settings.value.folderNames
             val folders = customFolderUris.map { uri ->
                 CustomFolder(uri, names[uri] ?: "مجلد مضاف")
             }
             val result = runCatching { videoRepo.loadAll(folders) }.getOrDefault(emptyList())
             _videos.value = result
+            hasLoadedOnce = true
             _loading.value = false
         }
     }

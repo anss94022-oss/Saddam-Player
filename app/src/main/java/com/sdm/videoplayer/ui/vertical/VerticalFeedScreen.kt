@@ -71,7 +71,9 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.sdm.videoplayer.R
 import com.sdm.videoplayer.data.model.LibraryEntry
+import com.sdm.videoplayer.service.PlaybackService
 import com.sdm.videoplayer.data.model.VideoItem
 import com.sdm.videoplayer.ui.theme.SdmColors
 import com.sdm.videoplayer.util.formatDuration
@@ -121,6 +123,11 @@ fun VerticalFeedScreen(
     var endedSignal by remember { mutableIntStateOf(0) }
 
     // مشغل نشط + مشغل ثانٍ للتهيئة المسبقة للفيديو التالي
+    // لا تسمح بتشغيل صوت سابق من خدمة الخلفية أثناء التمرير العمودي.
+    LaunchedEffect(Unit) {
+        if (PlaybackService.isRunning) PlaybackService.stop(context)
+    }
+
     val activePlayer = remember { ExoPlayer.Builder(context).build() }
     val preloadPlayer = remember { ExoPlayer.Builder(context).build().apply { volume = 0f; playWhenReady = false } }
 
@@ -237,7 +244,8 @@ fun VerticalFeedScreen(
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
-                            PlayerView(ctx).apply {
+                            (android.view.LayoutInflater.from(ctx)
+                                .inflate(R.layout.view_video_player, null) as PlayerView).apply {
                                 useController = false
                                 resizeMode = zoomMode
                                 this.player = activePlayer

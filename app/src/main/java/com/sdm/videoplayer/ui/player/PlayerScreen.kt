@@ -20,8 +20,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -118,7 +119,9 @@ import com.sdm.videoplayer.ui.theme.SdmColors
 import com.sdm.videoplayer.util.formatDuration
 import com.sdm.videoplayer.util.formatSize
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -221,16 +224,6 @@ fun PlayerScreen(
     // الخروج من المشغل: يحفظ الموضع، وينقل التشغيل إلى الخدمة إذا كان «الصوت في الخلفية» مفعّلًا.
     fun leavePlayer() {
         onSaveProgress(current?.uri ?: "", player.currentPosition, durationMs)
-        if (backgroundPlayback && items.isNotEmpty() && player.mediaItemCount > 0) {
-            PlaybackService.start(
-                context,
-                items.map { it.uri },
-                items.map { it.title },
-                currentIndex,
-                player.currentPosition,
-                speed
-            )
-        }
         onBack()
     }
 
@@ -399,97 +392,147 @@ fun PlayerScreen(
 
     BackHandler { leavePlayer() }
 
-    fun applyBrightness(delta: Float) {
-        val window = activity?.window ?: return
-        val params = window.attributes
-        val next = (if (params.screenBrightness < 0) 0.5f else params.screenBrightness) + delta
-        params.screenBrightness = next.coerceIn(0.02f, 1f)
-        window.attributes = params
-        brightness = params.screenBrightness
-        gestureHint = "السطوع ${(params.screenBrightness * 100).toInt()}%"
+    // السطوع والصوت يُحسبان من قيمة البداية لكل إيماءة (حتى لا يضيع التغيير الصغير في التقريب).
+    fun currentBrightness(): Float {
+        val window = activity?.window ?: return 0.5f
+        val value = window.attributes.screenBrightness
+        return if (value < 0f) 0.5f else value
     }
 
-    fun applyVolume(delta: Float) {
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val next = (audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) + delta * max).toInt()
-            .coerceIn(0, max)
+    fun setBrightness(value: Float) {
+        val window = activity?.window ?: return
+        val params = window.attributes
+        params.screenBrightness = value.coerceIn(0.02f, 1f)
+        window.attributes = params
+        brightness = params.screenBrightness
+        gestureHint = "السطوع ${(brightness * 100).toInt()}%"
+    }
+
+    fun maxVolume(): Int = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+
+    fun currentVolume(): Int = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+
+    fun setVolume(value: Int) {
+        val max = maxVolume().coerceAtLeast(1)
+        val next = value.coerceIn(0, max)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, next, 0)
         volume = next.toFloat() / max
         gestureHint = "الصوت ${(volume * 100).toInt()}%"
     }
 
+    val tapScope = androidx.compose.runtime.rememberCoroutineScope()
+    var lastTapAt by remember { mutableLongStateOf(0L) }
+    var pendingTap by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
 
-        // سطح الفيديو مع الإيماءات
+        // سطح الفيديو مع الإيماءات: معالج واحد لكل اللمسات (نقرة / نقر مزدوج / سحب / تكبير)
+        // حتى لا يستهلك أحد المعالجات حدث النقرة قبل الآخر.
         Box(
             Modifier
                 .fillMaxSize()
-                .pointerInput(locked) {
+                .pointerInput(
+                    locked,
+                    gestureBrightnessEnabled,
+                    gestureVolumeEnabled,
+                    gestureSeekEnabled,
+                    doubleTapSeekEnabled
+                ) {
                     if (locked) return@pointerInput
-                    detectTapGestures(
-                        onTap = { controlsVisible = !controlsVisible },
-                        onDoubleTap = { offset ->
-                            if (doubleTapSeekEnabled) {
-                                if (offset.x < size.width / 2) {
-                                    player.seekTo((player.currentPosition - seekStepMs).coerceAtLeast(0))
-                                } else {
-                                    player.seekTo(
-                                        (player.currentPosition + seekStepMs)
-                                            .coerceAtMost(player.duration.coerceAtLeast(0))
-                                    )
-                                }
-                                gestureHint = if (offset.x < size.width / 2) "◀ ${seekStepMs / 1000} ثانية" else "${seekStepMs / 1000} ثانية ▶"
-                            }
-                        }
-                    )
-                }
-                .pointerInput(locked, gestureBrightnessEnabled, gestureVolumeEnabled, gestureSeekEnabled) {
-                    if (locked) return@pointerInput
-                    var startX = 0f
-                    var startY = 0f
-                    var mode = 0 // 1 brightness, 2 volume, 3 seek
-                    var basePosition = 0L
+                    val touchSlop = viewConfiguration.touchSlop
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        startX = down.position.x
-                        startY = down.position.y
-                        basePosition = player.currentPosition
-                        mode = 0
-                        var lastY = down.position.y
+                        val startX = down.position.x
+                        val startY = down.position.y
+                        val basePosition = player.currentPosition
+                        val baseBrightness = currentBrightness()
+                        val baseVolume = currentVolume()
+                        var mode = 0 // 1 سطوع، 2 صوت، 3 تقديم، 4 تكبير
+                        var event: androidx.compose.ui.input.pointer.PointerEvent
                         while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull() ?: break
+                            event = awaitPointerEvent()
+                            val pressedCount = event.changes.count { it.pressed }
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: event.changes.firstOrNull()
+                                ?: break
+                            if (pressedCount > 1) mode = 4
                             if (!change.pressed) break
-                            val dy = change.position.y - lastY
-                            lastY = change.position.y
-                            if (mode == 0 && (abs(change.position.y - startY) > 40f || abs(change.position.x - startX) > 40f)) {
-                                mode = if (abs(change.position.x - startX) > abs(change.position.y - startY)) 3
-                                else if (startX < size.width / 2) 1 else 2
+
+                            if (mode == 0) {
+                                val dragX = change.position.x - startX
+                                val dragY = change.position.y - startY
+                                if (abs(dragX) > touchSlop || abs(dragY) > touchSlop) {
+                                    mode = if (abs(dragX) > abs(dragY)) 3
+                                    else if (startX < size.width / 2) 1 else 2
+                                }
                             }
+
+                            val verticalFraction = (startY - change.position.y) / size.height
                             when (mode) {
-                                1 -> if (gestureBrightnessEnabled) applyBrightness(-dy / size.height)
-                                2 -> if (gestureVolumeEnabled) applyVolume(-dy / size.height)
+                                1 -> if (gestureBrightnessEnabled) {
+                                    setBrightness(baseBrightness + verticalFraction)
+                                    change.consume()
+                                }
+
+                                2 -> if (gestureVolumeEnabled) {
+                                    setVolume(
+                                        (baseVolume + verticalFraction * maxVolume()).roundToInt()
+                                    )
+                                    change.consume()
+                                }
+
                                 3 -> if (gestureSeekEnabled) {
                                     val deltaMs = ((change.position.x - startX) / size.width) * 120_000f
                                     val target = (basePosition + deltaMs.toLong())
                                         .coerceIn(0L, player.duration.coerceAtLeast(0L))
                                     player.seekTo(target)
-                                    gestureHint = "${formatDuration(target)} / ${formatDuration(player.duration)}"
+                                    gestureHint =
+                                        "${formatDuration(target)} / ${formatDuration(player.duration)}"
+                                    change.consume()
+                                }
+
+                                4 -> {
+                                    val zoomChange = event.calculateZoom()
+                                    if (zoomChange != 1f) {
+                                        zoom = (zoom * zoomChange).coerceIn(1f, 4f)
+                                    }
+                                    val pan = event.calculatePan()
+                                    if (zoom > 1f) {
+                                        zoomOffsetX += pan.x
+                                        zoomOffsetY += pan.y
+                                    }
+                                    event.changes.forEach {
+                                        if (it.positionChanged()) it.consume()
+                                    }
                                 }
                             }
-                            change.consume()
                         }
-                    }
-                }
-                .pointerInput(locked) {
-                    if (locked) return@pointerInput
-                    detectTransformGestures { _, pan, gestureZoom, _ ->
-                        if (gestureZoom != 1f) {
-                            zoom = (zoom * gestureZoom).coerceIn(1f, 4f)
-                        }
-                        if (zoom > 1f) {
-                            zoomOffsetX += pan.x
-                            zoomOffsetY += pan.y
+
+                        // لم يتحرك الإصبع: نقرة واحدة تُظهر/تخفي الأزرار، ونقرتان تقدّم أو ترجّع.
+                        if (mode == 0) {
+                            val now = System.currentTimeMillis()
+                            if (doubleTapSeekEnabled && now - lastTapAt < DOUBLE_TAP_MS) {
+                                pendingTap?.cancel()
+                                pendingTap = null
+                                lastTapAt = 0L
+                                if (startX < size.width / 2) {
+                                    player.seekTo((player.currentPosition - seekStepMs).coerceAtLeast(0))
+                                    gestureHint = "◀ ${seekStepMs / 1000} ثانية"
+                                } else {
+                                    player.seekTo(
+                                        (player.currentPosition + seekStepMs)
+                                            .coerceAtMost(player.duration.coerceAtLeast(0L))
+                                    )
+                                    gestureHint = "${seekStepMs / 1000} ثانية ▶"
+                                }
+                            } else {
+                                lastTapAt = now
+                                pendingTap?.cancel()
+                                pendingTap = tapScope.launch {
+                                    delay(DOUBLE_TAP_MS.toLong())
+                                    controlsVisible = !controlsVisible
+                                }
+                            }
                         }
                     }
                 }
@@ -504,7 +547,8 @@ fun PlayerScreen(
                         translationY = zoomOffsetY
                     },
                 factory = { ctx ->
-                    PlayerView(ctx).apply {
+                    (android.view.LayoutInflater.from(ctx)
+                        .inflate(R.layout.view_video_player, null) as PlayerView).apply {
                         useController = false
                         this.resizeMode = resizeMode
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
@@ -861,6 +905,8 @@ fun PlayerScreen(
         }
     }
 }
+
+private const val DOUBLE_TAP_MS = 280
 
 private val SUBTITLE_MIME_TYPES = arrayOf(
     "application/x-subrip",

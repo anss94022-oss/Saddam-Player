@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  سطح عرض الفيديو.
+  surface_type=texture_view ضروري حتى تظهر أزرار التحكم (Compose) فوق الفيديو،
+  وSurfaceView كان يغطيها ويمنع التكبير/التصغير والتدوير من العمل.
+-->
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/video_player_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:keepScreenOn="true"
+    app:resize_mode="fit"
+    app:show_buffering="when_playing"
+    app:surface_type="texture_view"
+    app:use_controller="false" />

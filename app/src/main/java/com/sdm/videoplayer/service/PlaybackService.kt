@@ -234,6 +234,10 @@ class PlaybackService : MediaSessionService() {
             speed: Float = 1f
         ) {
             if (uris.isEmpty()) return
+            // تُعلَّم الحالة فورًا حتى يتوقف المشغل الأمامي عن التشغيل عند العودة (بدون صوت مزدوج).
+            isRunning = true
+            lastPlayedUri = uris.getOrNull(index.coerceIn(0, uris.lastIndex))
+            lastPositionMs = positionMs
             val intent = Intent(context, PlaybackService::class.java).apply {
                 action = ACTION_START
                 putStringArrayListExtra(EXTRA_URIS, ArrayList(uris))
