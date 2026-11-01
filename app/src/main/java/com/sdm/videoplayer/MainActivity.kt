@@ -1,6 +1,7 @@
 package com.sdm.videoplayer
 
 import android.app.PictureInPictureParams
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -40,30 +41,38 @@ import com.sdm.videoplayer.ui.vertical.VerticalFeedScreen
 class MainActivity : ComponentActivity() {
 
     private var appViewModel: MainViewModel? = null
+    /** هل المشغل هو الشاشة الظاهرة الآن؟ (لدخول PiP فقط أثناء التشغيل). */
+    private var playerVisible = false
+
+    /** الفيديو القادم من تطبيق آخر — يتحدث أيضًا عند إعادة استخدام النشاط (singleTask). */
+    private val incomingUri = mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val incoming: Uri? = intent?.data
+        incomingUri.value = intent?.data
 
         setContent {
             val vm: MainViewModel = viewModel()
             SideEffect { appViewModel = vm }
             val settings by vm.settings.collectAsStateWithLifecycle()
+            val incoming: Uri? by incomingUri
 
             var route by remember { mutableStateOf<Route>(Route.Home) }
+            SideEffect { playerVisible = route == Route.Player }
             var queue by remember { mutableStateOf(PlaybackQueue()) }
             var startPosition by remember { mutableStateOf(-1L) }
             var verticalEntries by remember { mutableStateOf<List<LibraryEntry>>(emptyList()) }
             var verticalStart by remember { mutableIntStateOf(0) }
 
             LaunchedEffect(incoming) {
-                if (incoming != null) {
-                    val name = incoming.lastPathSegment?.substringAfterLast('/') ?: "فيديو"
+                val launchedWith: Uri? = incoming
+                if (launchedWith != null) {
+                    val name = launchedWith.lastPathSegment?.substringAfterLast('/') ?: "فيديو"
                     val item = VideoItem(
-                        uri = incoming.toString(),
+                        uri = launchedWith.toString(),
                         title = name.substringBeforeLast('.'),
                         durationMs = 0L,
                         sizeBytes = 0L,
@@ -74,7 +83,7 @@ class MainActivity : ComponentActivity() {
                         relativePath = "",
                         width = 0,
                         height = 0,
-                        mimeType = contentResolver.getType(incoming) ?: "video/*",
+                        mimeType = contentResolver.getType(launchedWith) ?: "video/*",
                         absolutePath = null
                     )
                     queue = PlaybackQueue.of(listOf(item), 0, item.title)
@@ -116,6 +125,7 @@ class MainActivity : ComponentActivity() {
                                 gestureSeekEnabled = settings.gestureSeek,
                                 doubleTapSeekEnabled = settings.doubleTapSeek,
                                 subtitleSizeSp = settings.subtitleSize,
+                                backgroundPlayback = settings.backgroundPlayback,
                                 onBack = { route = Route.Home },
                                 onSaveProgress = { uri, pos, dur ->
                                     if (uri.isNotBlank()) vm.saveProgress(uri, pos, dur)
@@ -124,8 +134,6 @@ class MainActivity : ComponentActivity() {
                                 isFavorite = queue.current?.let { cur ->
                                     vm.uiState.value.entries.firstOrNull { it.video.uri == cur.uri }?.isFavorite == true
                                 } ?: false,
-                                onShare = { },
-                                onAddSubtitle = { },
                                 onOpenQueue = { route = Route.Home }
                             )
 
@@ -149,10 +157,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingUri.value = intent.data
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         val pipEnabled = appViewModel?.settings?.value?.pipOnLeave ?: false
-        if (pipEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (pipEnabled && playerVisible && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             runCatching {
                 enterPictureInPictureMode(
                     PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()

@@ -70,6 +70,8 @@ import com.sdm.videoplayer.ui.lists.PlaylistDetailScreen
 import com.sdm.videoplayer.ui.lists.PlaylistsScreen
 import com.sdm.videoplayer.ui.settings.SettingsScreen
 import com.sdm.videoplayer.ui.theme.SdmColors
+import com.sdm.videoplayer.util.openVideoWith
+import com.sdm.videoplayer.util.shareVideo
 import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String) {
@@ -118,17 +120,6 @@ fun MainScreen(
             }
             val name = uri.lastPathSegment?.substringAfterLast(':').orEmpty().ifBlank { "مجلد مضاف" }
             vm.addFolder(uri.toString(), name)
-        }
-    }
-
-    val subtitleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            snackbar = "تم اختيار ملف الترجمة — سيُطبق داخل المشغل عند إعادة فتح الفيديو."
         }
     }
 
@@ -354,21 +345,11 @@ fun MainScreen(
                 actionEntry = null
             },
             onShare = {
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = entry.video.mimeType.ifBlank { "video/*" }
-                    putExtra(Intent.EXTRA_STREAM, entry.video.contentUri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                runCatching { context.startActivity(Intent.createChooser(intent, "مشاركة الفيديو")) }
+                shareVideo(context, entry.video)
                 actionEntry = null
             },
             onShareLink = {
-                runCatching {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, entry.video.contentUri)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    )
-                }
+                openVideoWith(context, entry.video)
                 actionEntry = null
             },
             onPlaylist = { showPlaylistPick = true },

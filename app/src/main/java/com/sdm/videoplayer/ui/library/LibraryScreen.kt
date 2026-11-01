@@ -260,14 +260,16 @@ fun LibraryScreen(
                             entry = entry,
                             onClick = {
                                 onVideoClick(state.resumeList, state.resumeList.indexOf(entry), "استكمال المشاهدة")
-                            }
+                            },
+                            onLongClick = { onVideoLongClick(entry) }
                         )
                     }
                 }
                 items(normal) { entry ->
                     VideoRow(
                         entry = entry,
-                        onClick = { onVideoClick(normal, normal.indexOf(entry), folderFilter ?: "كل الفيديوهات") }
+                        onClick = { onVideoClick(normal, normal.indexOf(entry), folderFilter ?: "كل الفيديوهات") },
+                        onLongClick = { onVideoLongClick(entry) }
                     )
                 }
             }

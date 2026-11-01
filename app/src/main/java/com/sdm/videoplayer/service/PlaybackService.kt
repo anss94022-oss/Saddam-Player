@@ -1,296 +1,256 @@
 package com.sdm.videoplayer.service
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.IBinder
-import android.support.v4.media.MediaMetadataCompat
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
-import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
-import androidx.core.content.ContextCompat
-import androidx.media.app.NotificationCompat.MediaStyle
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
 import com.sdm.videoplayer.MainActivity
-import com.sdm.videoplayer.R
 import com.sdm.videoplayer.SdmApplication
-import com.sdm.videoplayer.util.formatDuration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * تشغيل الصوت في الخلفية مع إشعار وسائط يتضمن الاسم وأزرار التشغيل/الإيقاف والتالي والسابق.
- * يعمل فقط عندما يفعّل المستخدم «الاستمرار بالصوت في الخلفية».
+ * خدمة تشغيل الوسائط في الخلفية.
+ *
+ * تعتمد على Media3 (MediaSessionService + ExoPlayer) لتطابق تعريف الخدمة في
+ * AndroidManifest.xml:
+ *
+ * ```
+ * <service android:name=".service.PlaybackService"
+ *          android:foregroundServiceType="mediaPlayback">
+ *     <intent-filter>
+ *         <action android:name="androidx.media3.session.MediaSessionService" />
+ *     </intent-filter>
+ * </service>
+ * ```
+ *
+ * الإشعار (تشغيل/إيقاف، التالي، السابق، شريط التقدم) يُدار تلقائيًا بواسطة Media3،
+ * ويبقى الصوت مستمرًا عند إغلاق واجهة المشغل أو سحب التطبيق من قائمة التطبيقات
+ * الأخيرة، مع حفظ موضع التشغيل في قاعدة البيانات.
  */
-class PlaybackService : Service() {
+class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
-    private var session: MediaSessionCompat? = null
+    private var mediaSession: MediaSession? = null
     private var progressJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val uris = mutableListOf<String>()
-    private val titles = mutableListOf<String>()
-    private var index = 0
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onCreate() {
         super.onCreate()
-        createChannel()
-        session = MediaSessionCompat(this, "SDMVP").apply {
-            setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() { player?.play() }
-                override fun onPause() { player?.pause() }
-                override fun onSkipToNext() = move(1)
-                override fun onSkipToPrevious() = move(-1)
-                override fun onSeekTo(pos: Long) {
-                    player?.seekTo(pos)
-                    refreshNotification()
-                }
-                override fun onStop() { stopSelf() }
-            })
-            isActive = true
-        }
-    }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> {
-                uris.clear()
-                titles.clear()
-                uris += intent.getStringArrayListExtra(EXTRA_URIS).orEmpty()
-                titles += intent.getStringArrayListExtra(EXTRA_TITLES).orEmpty()
-                index = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, (uris.size - 1).coerceAtLeast(0))
-                val position = intent.getLongExtra(EXTRA_POSITION, 0L)
-                prepare(position)
-            }
-            ACTION_TOGGLE -> {
-                player?.let { if (it.isPlaying) it.pause() else it.play() }
-                refreshNotification()
-            }
-            ACTION_NEXT -> move(1)
-            ACTION_PREV -> move(-1)
-            ACTION_STOP -> stopSelf()
-        }
-        return START_NOT_STICKY
-    }
+        val exo = ExoPlayer.Builder(this)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                /* handleAudioFocus= */ true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .build()
+        player = exo
 
-    private fun prepare(startPositionMs: Long) {
-        if (uris.isEmpty()) {
-            stopSelf()
-            return
-        }
-        val exo = player ?: ExoPlayer.Builder(this).build().also { created ->
-            created.addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) = refreshNotification()
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
-                        if (index >= uris.lastIndex) {
-                            saveProgress()
-                            stopSelf()
-                        } else {
-                            move(1)
-                        }
-                    }
-                }
-            })
-            player = created
-        }
-        exo.setMediaItems(uris.map { MediaItem.fromUri(it) }, index, startPositionMs.coerceAtLeast(0L))
-        exo.prepare()
-        exo.playWhenReady = true
-
-        startForegroundCompat(buildNotification())
-        refreshNotification()
-        startProgressLoop()
-    }
-
-    private fun move(delta: Int) {
-        val next = index + delta
-        if (next !in uris.indices) return
-        saveProgress()
-        index = next
-        player?.let {
-            it.seekToDefaultPosition(next)
-            it.playWhenReady = true
-        }
-        refreshNotification()
-    }
-
-    private fun startProgressLoop() {
-        progressJob?.cancel()
-        progressJob = scope.launch {
-            while (true) {
-                delay(5_000L)
+        exo.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 saveProgress()
-                refreshNotification()
             }
-        }
-    }
 
-    private fun saveProgress() {
-        val exo = player ?: return
-        val uri = uris.getOrNull(index) ?: return
-        val duration = exo.duration
-        if (duration > 0) {
-            val container = (application as? SdmApplication)?.container ?: return
-            // حفظ الموضع محليًا حتى يستأنف المشغل من نفس النقطة
-            scope.launch { container.userData.saveProgress(uri, exo.currentPosition, duration) }
-        }
-    }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (!isPlaying) saveProgress()
+            }
 
-    private fun buildNotification(): Notification {
-        val title = titles.getOrNull(index) ?: "SDM VP"
-        val exo = player
-        val playing = exo?.isPlaying == true
-        val position = exo?.currentPosition ?: 0L
-        val duration = exo?.duration?.takeIf { it > 0 } ?: 0L
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) {
+                    saveProgress()
+                    // بعد نهاية القائمة: أوقف الخدمة وأزل الإشعار بدل ترك خدمة صامتة تعمل.
+                    if (!exo.hasNextMediaItem()) stopSelf()
+                }
+            }
+        })
 
-        val contentIntent = PendingIntent.getActivity(
-            this, 0,
+        val sessionActivity = PendingIntent.getActivity(
+            this,
+            0,
             Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_sdm)
-            .setContentTitle(title)
-            .setContentText(if (duration > 0) "${formatDuration(position)} / ${formatDuration(duration)}" else getString(R.string.app_name))
-            .setContentIntent(contentIntent)
-            .setOngoing(playing)
-            .setOnlyAlertOnce(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setShowWhen(false)
-            .addAction(actionIcon(if (playing) R.drawable.ic_pause else R.drawable.ic_play, if (playing) R.string.pause else R.string.play, ACTION_TOGGLE))
-            .addAction(actionIcon(R.drawable.ic_next, R.string.next, ACTION_NEXT))
-            .addAction(actionIcon(R.drawable.ic_close, R.string.close, ACTION_STOP))
+        mediaSession = MediaSession.Builder(this, exo)
+            .setSessionActivity(sessionActivity)
+            .build()
+    }
 
-        session?.let { s ->
-            s.setMetadata(
-                MediaMetadataCompat.Builder()
-                    .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
-                    .build()
-            )
-            s.setPlaybackState(
-                PlaybackStateCompat.Builder()
-                    .setActions(
-                        PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                            PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                            PlaybackStateCompat.ACTION_SEEK_TO
-                    )
-                    .setState(
-                        if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
-                        position, 1f
-                    )
-                    .build()
-            )
-            builder.setStyle(MediaStyle().setMediaSession(s.sessionToken).setShowActionsInCompactView(0, 1))
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START -> {
+                val uris = intent.getStringArrayListExtra(EXTRA_URIS).orEmpty()
+                val titles = intent.getStringArrayListExtra(EXTRA_TITLES).orEmpty()
+                val startIndex = intent.getIntExtra(EXTRA_INDEX, 0)
+                val position = intent.getLongExtra(EXTRA_POSITION, 0L)
+                val speed = intent.getFloatExtra(EXTRA_SPEED, 1f)
+                if (uris.isNotEmpty()) loadPlaylist(uris, titles, startIndex, position, speed)
+            }
+
+            ACTION_TOGGLE -> {
+                player?.let { if (it.isPlaying) it.pause() else it.play() }
+            }
+
+            ACTION_STOP -> stopPlayback()
         }
-        return builder.build()
+        // تمرير بقية الأوامر (أزرار الوسائط، إجراءات الإشعار) إلى Media3.
+        return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun actionIcon(icon: Int, titleRes: Int, action: String): NotificationCompat.Action {
-        val pi = PendingIntent.getService(
-            this, action.hashCode(),
-            Intent(this, PlaybackService::class.java).setAction(action),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Action(icon, getString(titleRes), pi)
-    }
-
-    private fun refreshNotification() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification())
-    }
-
-    private fun startForegroundCompat(notification: Notification) {
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            notification,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            } else 0
-        )
-    }
-
-    private fun createChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.app_name),
-            NotificationManager.IMPORTANCE_LOW
-        ).apply { setShowBadge(false) }
-        manager.createNotificationChannel(channel)
-    }
-
-    override fun onDestroy() {
-        progressJob?.cancel()
-        saveProgressNow()
-        scope.cancel()
-        player?.release()
-        player = null
-        session?.release()
-        session = null
-        super.onDestroy()
-    }
-
-    private fun saveProgressNow() {
+    private fun loadPlaylist(
+        uris: List<String>,
+        titles: List<String>,
+        startIndex: Int,
+        startPositionMs: Long,
+        speed: Float
+    ) {
         val exo = player ?: return
-        val uri = uris.getOrNull(index) ?: return
-        val duration = exo.duration
-        if (duration > 0) {
-            val container = (application as? SdmApplication)?.container ?: return
-            kotlinx.coroutines.runBlocking {
-                container.userData.saveProgress(uri, exo.currentPosition, duration)
+        val safeIndex = startIndex.coerceIn(0, uris.lastIndex)
+        val items = uris.mapIndexed { i, uri ->
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(titles.getOrNull(i) ?: "")
+                        .build()
+                )
+                .build()
+        }
+        exo.setMediaItems(items, safeIndex, startPositionMs.coerceAtLeast(0L))
+        exo.setPlaybackSpeed(speed)
+        exo.prepare()
+        exo.playWhenReady = true
+        isRunning = true
+        startProgressTicker()
+    }
+
+    /** تحديث الموضع المشترك كل ثانيتين + حفظ دوري في قاعدة البيانات. */
+    private fun startProgressTicker() {
+        progressJob?.cancel()
+        progressJob = scope.launch {
+            while (true) {
+                delay(2_000L)
+                val exo = player ?: break
+                lastPositionMs = exo.currentPosition.coerceAtLeast(0L)
+                saveProgress()
             }
         }
     }
 
+    private fun stopPlayback() {
+        player?.pause()
+        saveProgress()
+        stopSelf()
+    }
+
+    /** حفظ موضع التشغيل الحالي في قاعدة البيانات حتى يستأنف المشغل من نفس النقطة. */
+    private fun saveProgress() {
+        val exo = player ?: return
+        val item = exo.currentMediaItem ?: return
+        lastPlayedUri = item.localConfiguration?.uri?.toString()
+        lastPositionMs = exo.currentPosition.coerceAtLeast(0L)
+        val duration = exo.duration
+        if (duration <= 0) return
+        val position = exo.currentPosition
+        val uri = item.localConfiguration?.uri?.toString() ?: return
+        val container = (application as? SdmApplication)?.container ?: return
+        scope.launch { container.userData.saveProgress(uri, position, duration) }
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // استمرار التشغيل عند سحب التطبيق من قائمة التطبيقات الأخيرة.
+        val exo = player
+        if (exo == null || !exo.playWhenReady || exo.mediaItemCount == 0) {
+            saveProgress()
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onDestroy() {
+        isRunning = false
+        progressJob?.cancel()
+        saveProgress()
+        mediaSession?.run {
+            player.release()
+            release()
+        }
+        mediaSession = null
+        player = null
+        scope.cancel()
+        super.onDestroy()
+    }
+
     companion object {
-        private const val CHANNEL_ID = "sdm_playback"
-        private const val NOTIFICATION_ID = 4201
+        private const val COMMAND_STOP_PLAYBACK = "com.sdm.videoplayer.STOP_PLAYBACK"
+
+        /** حالة مشتركة بسيطة تسمح لواجهة المشغل باستعادة موضع التشغيل عند العودة. */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+        @Volatile
+        var lastPlayedUri: String? = null
+        @Volatile
+        var lastPositionMs: Long = 0L
+
         const val ACTION_START = "com.sdm.videoplayer.START_PLAYBACK"
         const val ACTION_TOGGLE = "com.sdm.videoplayer.TOGGLE"
-        const val ACTION_NEXT = "com.sdm.videoplayer.NEXT"
-        const val ACTION_PREV = "com.sdm.videoplayer.PREV"
         const val ACTION_STOP = "com.sdm.videoplayer.STOP"
         private const val EXTRA_URIS = "uris"
         private const val EXTRA_TITLES = "titles"
         private const val EXTRA_INDEX = "index"
         private const val EXTRA_POSITION = "position"
+        private const val EXTRA_SPEED = "speed"
 
-        fun start(context: Context, uris: List<String>, titles: List<String>, index: Int, positionMs: Long) {
+        /**
+         * تشغيل قائمة في الخلفية. يُستدعى من التطبيق وهو في الواجهة (قبل تصغيره)،
+         * لذلك يكفي startService العادي؛ وMedia3 يرفع الخدمة إلى foreground عند بدء التشغيل.
+         */
+        fun start(
+            context: Context,
+            uris: List<String>,
+            titles: List<String>,
+            index: Int,
+            positionMs: Long,
+            speed: Float = 1f
+        ) {
+            if (uris.isEmpty()) return
             val intent = Intent(context, PlaybackService::class.java).apply {
                 action = ACTION_START
                 putStringArrayListExtra(EXTRA_URIS, ArrayList(uris))
                 putStringArrayListExtra(EXTRA_TITLES, ArrayList(titles))
                 putExtra(EXTRA_INDEX, index)
                 putExtra(EXTRA_POSITION, positionMs)
+                putExtra(EXTRA_SPEED, speed)
             }
-            ContextCompat.startForegroundService(context, intent)
+            runCatching { context.startService(intent) }
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, PlaybackService::class.java).setAction(ACTION_STOP))
+            runCatching {
+                context.startService(
+                    Intent(context, PlaybackService::class.java).setAction(ACTION_STOP)
+                )
+            }
         }
     }
 }

@@ -135,4 +135,10 @@
     <string name="info_added">تاريخ الإضافة</string>
     <string name="info_modified">تاريخ التعديل</string>
     <string name="info_missing">غير متاح</string>
+    <!-- مشاركة / ترجمة (إضافات الإصلاح) -->
+    <string name="share_failed">لا يوجد تطبيق يمكنه استلام هذا الفيديو.</string>
+    <string name="no_app_to_open">لا يوجد تطبيق آخر يمكنه فتح هذا الملف.</string>
+    <string name="subtitle_applied">تم تطبيق الترجمة: %1$s</string>
+    <string name="remove_subtitle">إزالة الترجمة</string>
+    <string name="no_audio_tracks">لا توجد مسارات صوتية بديلة</string>
 </resources>

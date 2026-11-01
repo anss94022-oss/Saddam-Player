@@ -1,7 +1,9 @@
 package com.sdm.videoplayer.ui.common
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -125,6 +127,7 @@ fun ThumbnailBox(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoGridCard(
     entry: LibraryEntry,
@@ -135,7 +138,7 @@ fun VideoGridCard(
     Surface(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         color = MaterialTheme.colorScheme.surface
     ) {
         Column {
@@ -160,16 +163,18 @@ fun VideoGridCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoRow(
     entry: LibraryEntry,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

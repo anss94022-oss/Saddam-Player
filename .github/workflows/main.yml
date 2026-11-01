@@ -10,15 +10,21 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build SDM VP APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # JDK 17 مطلوب مع AGP 8.6 (JDK 21 يسبب فشل androidJdkImage)
+      # JDK 17 مطلوب مع AGP 8.6
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -27,35 +33,66 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Install platform and build-tools
-        run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Set up Gradle 8.7
-        uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --version
+
+      - name: Verify Android SDK packages
+        run: |
+          sdkmanager --list_installed | tee /tmp/sdk-installed.txt
+          grep -q "platforms;android-35" /tmp/sdk-installed.txt
+          grep -q "build-tools;35.0.0" /tmp/sdk-installed.txt
+
+      - name: Set up Gradle (wrapper)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Gradle configuration check
+        run: ./gradlew --version -q && ./gradlew projects --stacktrace
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
 
-      - name: Build release APK (unsigned fallback avoided; signed with debug key)
-        if: success()
-        run: gradle assembleRelease --stacktrace --no-daemon
+      - name: Build release APK
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: Verify APK outputs
+        run: |
+          ls -l app/build/outputs/apk/debug/
+          ls -l app/build/outputs/apk/release/
+          test -n "$(find app/build/outputs/apk/debug -name '*.apk' -print -quit)"
+          test -n "$(find app/build/outputs/apk/release -name '*.apk' -print -quit)"
 
       - name: Upload debug APK
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: SDM-VP-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Upload release APK
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: SDM-VP-release-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
+
+      - name: Upload build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/**
+            app/build/outputs/logs/**
+            **/build/reports/**
+          if-no-files-found: warn
+          retention-days: 7

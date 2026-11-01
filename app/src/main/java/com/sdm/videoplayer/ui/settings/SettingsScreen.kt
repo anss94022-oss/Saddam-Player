@@ -2,6 +2,7 @@ package com.sdm.videoplayer.ui.settings
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,7 +72,6 @@ fun SettingsScreen(
     onClearThumbnails: () -> Unit
 ) {
     var showPrivacy by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
 
     LazyColumn(contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 100.dp)) {
         item {
@@ -137,7 +137,7 @@ fun SettingsScreen(
                                     .size(34.dp)
                                     .clip(CircleShape)
                                     .background(accentColor(accent))
-                                    .padding(0.dp),
+                                    .clickable { onAccent(accent) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (settings.accent == accent) {

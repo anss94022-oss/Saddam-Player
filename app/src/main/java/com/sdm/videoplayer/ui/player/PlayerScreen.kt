@@ -9,7 +9,10 @@ import android.net.Uri
 import android.os.Build
 import android.util.Rational
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -51,6 +54,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -88,6 +92,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
@@ -99,10 +106,14 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.sdm.videoplayer.R
 import com.sdm.videoplayer.data.model.PlaybackQueue
 import com.sdm.videoplayer.data.model.RepeatMode
 import com.sdm.videoplayer.data.model.VideoItem
 import com.sdm.videoplayer.service.FloatingPlayerService
+import com.sdm.videoplayer.service.PlaybackService
+import com.sdm.videoplayer.util.SubtitleStore
+import com.sdm.videoplayer.util.shareVideo
 import com.sdm.videoplayer.ui.theme.SdmColors
 import com.sdm.videoplayer.util.formatDuration
 import com.sdm.videoplayer.util.formatSize
@@ -122,12 +133,11 @@ fun PlayerScreen(
     gestureSeekEnabled: Boolean,
     doubleTapSeekEnabled: Boolean,
     subtitleSizeSp: Float,
+    backgroundPlayback: Boolean,
     onBack: () -> Unit,
     onSaveProgress: (uri: String, positionMs: Long, durationMs: Long) -> Unit,
     onToggleFavorite: (VideoItem) -> Unit,
     isFavorite: Boolean,
-    onShare: (VideoItem) -> Unit,
-    onAddSubtitle: (VideoItem) -> Unit,
     onOpenQueue: () -> Unit
 ) {
     val context = LocalContext.current
@@ -153,6 +163,8 @@ fun PlayerScreen(
     var showTrackMenu by remember { mutableStateOf(false) }
     var audioTracks by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedAudio by remember { mutableStateOf(-1) }
+    var audioGroups by remember { mutableStateOf<List<androidx.media3.common.Tracks.Group>>(emptyList()) }
+    var subtitleName by remember { mutableStateOf<String?>(null) }
     var gestureHint by remember { mutableStateOf<String?>(null) }
     var brightness by remember { mutableFloatStateOf(0.5f) }
     var volume by remember { mutableFloatStateOf(0f) }
@@ -170,12 +182,117 @@ fun PlayerScreen(
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
-    // إعداد قائمة التشغيل مرة واحدة
+    // تطبيق ملف ترجمة خارجي (SRT / VTT / SSA-ASS) على الفيديو الحالي مع الحفاظ على الموضع.
+    fun applySubtitle(subUri: android.net.Uri?) {
+        val item = items.getOrNull(currentIndex) ?: return
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val wasPlaying = player.playWhenReady
+        SubtitleStore.setSubtitle(context, item.uri, subUri?.toString())
+        subtitleName = subUri?.lastPathSegment?.substringAfterLast('/')
+        player.setMediaItems(
+            items.map { SubtitleStore.mediaItem(context, it.uri, it.title) },
+            currentIndex,
+            position
+        )
+        player.prepare()
+        player.playWhenReady = wasPlaying
+        Toast.makeText(
+            context,
+            if (subUri == null) context.getString(R.string.no_subtitle)
+            else context.getString(R.string.subtitle_applied, subtitleName ?: ""),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    val subtitleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            applySubtitle(uri)
+        }
+    }
+
+    // الخروج من المشغل: يحفظ الموضع، وينقل التشغيل إلى الخدمة إذا كان «الصوت في الخلفية» مفعّلًا.
+    fun leavePlayer() {
+        onSaveProgress(current?.uri ?: "", player.currentPosition, durationMs)
+        if (backgroundPlayback && items.isNotEmpty() && player.mediaItemCount > 0) {
+            PlaybackService.start(
+                context,
+                items.map { it.uri },
+                items.map { it.title },
+                currentIndex,
+                player.currentPosition,
+                speed
+            )
+        }
+        onBack()
+    }
+
+    // الصوت في الخلفية: عند تصغير التطبيق ينتقل التشغيل إلى الخدمة، وعند العودة يستعيد الموضع.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, backgroundPlayback) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    val inPip = activity?.isInPictureInPictureMode == true
+                    if (backgroundPlayback && !inPip && player.isPlaying && player.mediaItemCount > 0) {
+                        PlaybackService.start(
+                            context,
+                            items.map { it.uri },
+                            items.map { it.title },
+                            currentIndex,
+                            player.currentPosition,
+                            speed
+                        )
+                        player.pause()
+                    }
+                }
+
+                Lifecycle.Event.ON_START -> {
+                    if (PlaybackService.isRunning) {
+                        val playingUri =
+                            player.currentMediaItem?.localConfiguration?.uri?.toString()
+                        val resume = if (playingUri != null && playingUri == PlaybackService.lastPlayedUri) {
+                            PlaybackService.lastPositionMs
+                        } else 0L
+                        PlaybackService.stop(context)
+                        if (resume > 0) player.seekTo(resume)
+                        player.play()
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // إعداد قائمة التشغيل مرة واحدة (مع أي ملف ترجمة محفوظ مسبقًا)
     LaunchedEffect(queue) {
         if (items.isNotEmpty()) {
-            player.setMediaItems(items.map { MediaItem.fromUri(it.uri) }, currentIndex, startPositionMs.coerceAtLeast(0L))
+            // إذا كان التشغيل الخلفي يعمل لهذا الفيديو، استلم الموضع منه وأوقف الخدمة لتجنّب صوتين.
+            val backgroundPosition =
+                if (PlaybackService.isRunning && PlaybackService.lastPlayedUri == items[currentIndex].uri) {
+                    PlaybackService.lastPositionMs
+                } else 0L
+            if (PlaybackService.isRunning) PlaybackService.stop(context)
+            val startAt = if (startPositionMs > 0) startPositionMs else backgroundPosition
+            player.setMediaItems(
+                items.map { SubtitleStore.mediaItem(context, it.uri, it.title) },
+                currentIndex,
+                startAt.coerceAtLeast(0L)
+            )
             player.prepare()
             player.playWhenReady = true
+            subtitleName = SubtitleStore.subtitleFor(context, items[currentIndex].uri)
+                ?.let { android.net.Uri.parse(it).lastPathSegment?.substringAfterLast('/') }
         }
     }
 
@@ -216,6 +333,7 @@ fun PlayerScreen(
                 }
                 audioTracks = labels
                 selectedAudio = selected
+                audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
             }
         }
         player.addListener(listener)
@@ -227,15 +345,18 @@ fun PlayerScreen(
         }
     }
 
-    // حفظ التقدم بشكل دوري
+    // تحديث الواجهة كل ثانية، وحفظ الموضع في قاعدة البيانات كل 5 ثوانٍ فقط
     LaunchedEffect(currentIndex, current) {
+        var tick = 0
         while (true) {
             delay(1000)
             positionMs = player.currentPosition.coerceAtLeast(0L)
             durationMs = player.duration.takeIf { it > 0 } ?: 0L
             bufferedMs = player.bufferedPosition
-            current?.let { item ->
-                if (durationMs > 0) onSaveProgress(item.uri, positionMs, durationMs)
+            if (tick++ % 5 == 0) {
+                current?.let { item ->
+                    if (durationMs > 0) onSaveProgress(item.uri, positionMs, durationMs)
+                }
             }
         }
     }
@@ -276,10 +397,7 @@ fun PlayerScreen(
         }
     }
 
-    BackHandler {
-        onSaveProgress(current?.uri ?: "", player.currentPosition, durationMs)
-        onBack()
-    }
+    BackHandler { leavePlayer() }
 
     fun applyBrightness(delta: Float) {
         val window = activity?.window ?: return
@@ -338,14 +456,11 @@ fun PlayerScreen(
                         basePosition = player.currentPosition
                         mode = 0
                         var lastY = down.position.y
-                        var lastX = down.position.x
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull() ?: break
                             if (!change.pressed) break
-                            val dx = change.position.x - lastX
                             val dy = change.position.y - lastY
-                            lastX = change.position.x
                             lastY = change.position.y
                             if (mode == 0 && (abs(change.position.y - startY) > 40f || abs(change.position.x - startX) > 40f)) {
                                 mode = if (abs(change.position.x - startX) > abs(change.position.y - startY)) 3
@@ -363,9 +478,6 @@ fun PlayerScreen(
                                 }
                             }
                             change.consume()
-                        }
-                        if (mode > 0) {
-                            kotlinx.coroutines.MainScope().let { }
                         }
                     }
                 }
@@ -493,10 +605,9 @@ fun PlayerScreen(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = {
-                        onSaveProgress(current?.uri ?: "", player.currentPosition, durationMs)
-                        onBack()
-                    }) { Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White) }
+                    IconButton(onClick = { leavePlayer() }) {
+                        Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White)
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(
                             current?.title ?: "",
@@ -542,26 +653,51 @@ fun PlayerScreen(
                     Box {
                         DropdownMenu(expanded = showTrackMenu, onDismissRequest = { showTrackMenu = false }) {
                             if (audioTracks.isEmpty()) {
-                                DropdownMenuItem(text = { Text("لا توجد مسارات صوتية بديلة") }, onClick = { showTrackMenu = false })
+                                DropdownMenuItem(text = { Text(context.getString(R.string.no_audio_tracks)) }, onClick = { showTrackMenu = false })
                             }
                             audioTracks.forEachIndexed { idx, label ->
                                 DropdownMenuItem(
                                     text = { Text((if (idx == selectedAudio) "✓ " else "") + label) },
                                     onClick = {
-                                        player.trackSelectionParameters = player.trackSelectionParameters
-                                            .buildUpon()
-                                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                                            .build()
+                                        var offset = 0
+                                        for (group in audioGroups) {
+                                            if (idx < offset + group.length) {
+                                                player.trackSelectionParameters =
+                                                    player.trackSelectionParameters.buildUpon()
+                                                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                                                        .setOverrideForType(
+                                                            TrackSelectionOverride(
+                                                                group.mediaTrackGroup,
+                                                                idx - offset
+                                                            )
+                                                        )
+                                                        .build()
+                                                break
+                                            }
+                                            offset += group.length
+                                        }
                                         showTrackMenu = false
                                     }
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("＋ إضافة ملف ترجمة") },
-                                onClick = { showTrackMenu = false; onAddSubtitle(current ?: return@DropdownMenuItem) }
+                                text = { Text("＋ " + context.getString(R.string.add_subtitle_file)) },
+                                onClick = {
+                                    showTrackMenu = false
+                                    subtitleLauncher.launch(SUBTITLE_MIME_TYPES)
+                                }
                             )
+                            if (subtitleName != null) {
+                                DropdownMenuItem(
+                                    text = { Text("✕ " + context.getString(R.string.remove_subtitle)) },
+                                    onClick = { showTrackMenu = false; applySubtitle(null) }
+                                )
+                            }
                         }
                     }
+                    IconButton(onClick = {
+                        current?.let { shareVideo(context, it) }
+                    }) { Icon(Icons.Default.Share, context.getString(R.string.share), tint = Color.White) }
                     IconButton(onClick = {
                         if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             activity.enterPictureInPictureMode(
@@ -725,6 +861,15 @@ fun PlayerScreen(
         }
     }
 }
+
+private val SUBTITLE_MIME_TYPES = arrayOf(
+    "application/x-subrip",
+    "text/vtt",
+    "text/x-ssa",
+    "application/ttml+xml",
+    "text/plain",
+    "application/octet-stream"
+)
 
 private fun seekStepLabel(ms: Long): String = "${ms / 1000}s"
 

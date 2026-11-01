@@ -119,4 +119,10 @@
     <string name="info_added">Date added</string>
     <string name="info_modified">Date modified</string>
     <string name="info_missing">Unavailable</string>
+    <!-- Sharing / subtitles (fix additions) -->
+    <string name="share_failed">No app can receive this video.</string>
+    <string name="no_app_to_open">No other app can open this file.</string>
+    <string name="subtitle_applied">Subtitle applied: %1$s</string>
+    <string name="remove_subtitle">Remove subtitle</string>
+    <string name="no_audio_tracks">No alternative audio tracks</string>
 </resources>
