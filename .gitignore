@@ -2,10 +2,13 @@
 .gradle/
 /local.properties
 /.idea/
+.DS_Store
 /build/
 /app/build/
-*.apk
-*.aab
 captures/
 .externalNativeBuild/
 .cxx/
+*.apk
+*.aab
+*.hprof
+*.log

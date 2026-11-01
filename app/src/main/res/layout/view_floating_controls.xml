@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="74dp"
+    android:orientation="vertical"
+    android:background="#F212121D"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="4dp">
+
+    <TextView
+        android:id="@+id/floatingTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="12sp"
+        android:textColor="#E9EAF2"
+        android:text="@string/app_name" />
+
+    <ProgressBar
+        android:id="@+id/floatingProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginTop="3dp"
+        android:max="1000"
+        android:progressTint="#8B5CF6"
+        android:progressBackgroundTint="#2C2C3D" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/floatingRewind"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/previous"
+            android:src="@drawable/ic_rewind"
+            android:tint="#E9EAF2" />
+
+        <ImageButton
+            android:id="@+id/floatingPlay"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/play"
+            android:src="@drawable/ic_pause"
+            android:tint="#8B5CF6" />
+
+        <ImageButton
+            android:id="@+id/floatingForward"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/next"
+            android:src="@drawable/ic_forward"
+            android:tint="#E9EAF2" />
+
+        <ImageButton
+            android:id="@+id/floatingNext"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/next"
+            android:src="@drawable/ic_next"
+            android:tint="#E9EAF2" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/floatingExpand"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/fullscreen"
+            android:src="@drawable/ic_expand"
+            android:tint="#E9EAF2" />
+
+        <ImageButton
+            android:id="@+id/floatingClose"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/floating_close"
+            android:src="@drawable/ic_close"
+            android:tint="#EF4444" />
+    </LinearLayout>
+</LinearLayout>

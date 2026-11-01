@@ -12,17 +12,25 @@ permissions:
 
 jobs:
   build:
-    name: Build Saddam Player APK
+    name: Build SDM VP APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # JDK 17 مطلوب مع AGP 8.6 (JDK 21 يسبب فشل androidJdkImage)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform and build-tools
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
@@ -30,12 +38,24 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Build release APK (unsigned fallback avoided; signed with debug key)
+        if: success()
+        run: gradle assembleRelease --stacktrace --no-daemon
 
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Saddam-Player-debug-apk
+          name: SDM-VP-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Upload release APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SDM-VP-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: warn

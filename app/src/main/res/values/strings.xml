@@ -1,3 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Local Video Studio</string>
+    <string name="app_name">SDM VP</string>
+    <string name="app_name_full">Saddam Video Player</string>
+    <string name="app_name_ar">مشغل فيديو صدام</string>
+
+    <!-- التنقل -->
+    <string name="tab_library">المكتبة</string>
+    <string name="tab_vertical">عمودي</string>
+    <string name="tab_favorites">المفضلة</string>
+    <string name="tab_history">السجل</string>
+    <string name="tab_playlists">القوائم</string>
+    <string name="tab_settings">الإعدادات</string>
+
+    <!-- المكتبة -->
+    <string name="search_hint">ابحث باسم الفيديو</string>
+    <string name="refresh">تحديث المكتبة</string>
+    <string name="add_folder">إضافة مجلد</string>
+    <string name="empty_library">لا توجد فيديوهات بعد.\nأضف مجلدًا أو امنح صلاحية قراءة الفيديوهات.</string>
+    <string name="empty_favorites">لا توجد فيديوهات في المفضلة.</string>
+    <string name="empty_history">لا يوجد سجل مشاهدة.</string>
+    <string name="empty_playlists">لا توجد قوائم تشغيل. أنشئ قائمة جديدة.</string>
+    <string name="permission_needed">يحتاج التطبيق صلاحية قراءة الفيديوهات لعرض مكتبتك.</string>
+    <string name="grant_permission">منح الصلاحية</string>
+    <string name="grid_view">شبكة</string>
+    <string name="list_view">قائمة</string>
+    <string name="sort">الفرز</string>
+    <string name="continue_watching">استكمال المشاهدة</string>
+    <string name="all_videos">كل الفيديوهات</string>
+    <string name="hidden_badge">مخفي</string>
+    <string name="video_count">%1$d فيديو</string>
+
+    <!-- المشغل -->
+    <string name="play">تشغيل</string>
+    <string name="pause">إيقاف مؤقت</string>
+    <string name="next">التالي</string>
+    <string name="previous">السابق</string>
+    <string name="close">إغلاق</string>
+    <string name="back">رجوع</string>
+    <string name="speed">السرعة</string>
+    <string name="subtitles">الترجمة</string>
+    <string name="audio_track">المسار الصوتي</string>
+    <string name="add_subtitle_file">إضافة ملف ترجمة</string>
+    <string name="no_subtitle">بدون ترجمة</string>
+    <string name="subtitle_failed">تعذر تحميل ملف الترجمة.</string>
+    <string name="repeat_mode">وضع التكرار</string>
+    <string name="repeat_off">بدون تكرار</string>
+    <string name="repeat_one">تكرار الفيديو</string>
+    <string name="repeat_all">تكرار القائمة</string>
+    <string name="shuffle">عشوائي</string>
+    <string name="lock_touch">قفل اللمس</string>
+    <string name="unlock_touch">فك القفل</string>
+    <string name="fullscreen">ملء الشاشة</string>
+    <string name="exit_fullscreen">إنهاء ملء الشاشة</string>
+    <string name="floating_window">نافذة عائمة</string>
+    <string name="picture_in_picture">صورة داخل صورة</string>
+    <string name="start_over">البدء من البداية</string>
+    <string name="reset_zoom">إعادة التكبير</string>
+    <string name="video_info">معلومات الفيديو</string>
+    <string name="resume_from">متابعة من %1$s</string>
+    <string name="playback_error">تعذر تشغيل هذا الملف. قد تكون الصيغة أو الترميز غير مدعوم على هذا الجهاز.</string>
+
+    <!-- إدارة الملفات -->
+    <string name="share">مشاركة</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="delete">حذف</string>
+    <string name="delete_confirm">سيتم حذف الملف نهائيًا من الجهاز. هل أنت متأكد؟</string>
+    <string name="copy_to_folder">نسخ إلى مجلد</string>
+    <string name="open_with">فتح بتطبيق آخر</string>
+    <string name="hide_from_library">إخفاء من المكتبة</string>
+    <string name="show_in_library">إظهار في المكتبة</string>
+    <string name="add_to_favorite">إضافة إلى المفضلة</string>
+    <string name="remove_from_favorite">إزالة من المفضلة</string>
+    <string name="add_to_playlist">إضافة إلى قائمة تشغيل</string>
+    <string name="remove_from_playlist">إزالة من القائمة</string>
+    <string name="operation_success">تمت العملية بنجاح</string>
+    <string name="operation_denied">رفض النظام تنفيذ العملية.</string>
+
+    <!-- الإعدادات -->
+    <string name="settings_appearance">المظهر والهوية</string>
+    <string name="settings_theme">وضع الواجهة</string>
+    <string name="theme_system">حسب النظام</string>
+    <string name="theme_dark">داكن</string>
+    <string name="theme_light">فاتح</string>
+    <string name="settings_accent">لون الواجهة</string>
+    <string name="settings_language">اللغة</string>
+    <string name="settings_playback">التشغيل</string>
+    <string name="settings_default_speed">السرعة الافتراضية</string>
+    <string name="settings_seek_step">مدة التقديم والترجيع</string>
+    <string name="settings_auto_resume">الاستئناف التلقائي من آخر موضع</string>
+    <string name="settings_gestures">الإيماءات</string>
+    <string name="settings_gesture_brightness">السحب على اليسار لتغيير السطوع</string>
+    <string name="settings_gesture_volume">السحب على اليمين لتغيير الصوت</string>
+    <string name="settings_gesture_seek">السحب الأفقي لتغيير موضع التشغيل</string>
+    <string name="settings_double_tap">النقر المزدوج للتقديم والترجيع</string>
+    <string name="settings_lock_touch">بدء المشاهدة مع قفل اللمس</string>
+    <string name="settings_pip">صورة داخل صورة عند مغادرة التطبيق</string>
+    <string name="settings_background">الاستمرار بالصوت في الخلفية</string>
+    <string name="settings_subtitles">الترجمة</string>
+    <string name="settings_subtitle_size">حجم خط الترجمة</string>
+    <string name="settings_subtitle_color">لون الترجمة</string>
+    <string name="settings_folders">مجلدات المكتبة</string>
+    <string name="settings_data">البيانات</string>
+    <string name="clear_history">مسح سجل المشاهدة</string>
+    <string name="clear_thumbnails">مسح الصور المصغرة المؤقتة</string>
+    <string name="clear_saved_data">مسح البيانات المحفوظة</string>
+    <string name="settings_about">عن التطبيق</string>
+    <string name="about_version">الإصدار %1$s</string>
+    <string name="privacy_policy">سياسة الخصوصية</string>
+    <string name="privacy_body">كل ملفات الفيديو تُقرأ من جهازك فقط. لا يرفع التطبيق أي فيديو أو بيانات إلى أي خادم، ولا يستخدم أي خدمة مدفوعة أو مفاتيح API خارجية. الصلاحيات المطلوبة هي: قراءة الفيديوهات لعرض المكتبة، النافذة العائمة لعرض المشغل فوق التطبيقات، والإشعارات لعناصر التحكم أثناء التشغيل في الخلفية. تُخزَّن المفضلة وسجل المشاهدة وقوائم التشغيل والإعدادات محليًا على جهازك فقط ويمكنك مسحها في أي وقت.</string>
+
+    <!-- النافذة العائمة -->
+    <string name="overlay_permission_needed">لعرض النافذة العائمة فوق التطبيقات الأخرى يجب منح إذن «الظهور فوق التطبيقات».</string>
+    <string name="open_overlay_settings">فتح الإعدادات</string>
+    <string name="floating_close">إغلاق النافذة</string>
+    <string name="resize">تغيير الحجم</string>
+
+    <!-- قوائم التشغيل -->
+    <string name="new_playlist">قائمة تشغيل جديدة</string>
+    <string name="playlist_name">اسم القائمة</string>
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="ok">موافق</string>
+    <string name="delete_playlist">حذف القائمة</string>
+    <string name="play_all">تشغيل الكل</string>
+
+    <!-- معلومات الفيديو -->
+    <string name="info_title">العنوان</string>
+    <string name="info_duration">المدة</string>
+    <string name="info_size">الحجم</string>
+    <string name="info_resolution">الدقة</string>
+    <string name="info_aspect">نسبة الأبعاد</string>
+    <string name="info_path">المسار</string>
+    <string name="info_mime">النوع</string>
+    <string name="info_added">تاريخ الإضافة</string>
+    <string name="info_modified">تاريخ التعديل</string>
+    <string name="info_missing">غير متاح</string>
 </resources>

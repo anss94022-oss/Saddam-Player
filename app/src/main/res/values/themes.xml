@@ -1,5 +1,26 @@
-<resources>
-    <style name="Theme.LocalVideoStudio" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- تخصيص ألوان الثيم هنا حسب الحاجة -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <style name="Theme.SdmVP" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/sdm_violet</item>
+        <item name="colorSecondary">@color/sdm_cyan</item>
+        <item name="android:windowBackground">@color/sdm_night</item>
+        <item name="android:navigationBarColor">@color/sdm_night</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
+    </style>
+
+    <style name="Theme.SdmVP.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/sdm_night</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="windowSplashScreenAnimationDuration">600</item>
+        <item name="postSplashScreenTheme">@style/Theme.SdmVP</item>
+    </style>
+
+    <style name="SdmDialogTheme" parent="Theme.Material3.DayNight.Dialog.Alert">
+        <item name="colorPrimary">@color/sdm_violet</item>
+        <item name="android:windowBackground">@color/sdm_night_surface</item>
     </style>
 </resources>

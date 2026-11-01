@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LocalVideoPlayer"
+rootProject.name = "SaddamVideoPlayer"
 include(":app")
