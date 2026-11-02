@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sdm.videoplayer.R
 import com.sdm.videoplayer.data.model.LibraryEntry
 import com.sdm.videoplayer.data.model.PlaybackQueue
 import com.sdm.videoplayer.data.model.VideoItem
@@ -193,13 +195,13 @@ fun MainScreen(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    Modifier
-                        .size(38.dp)
+                Image(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.logo_sdm),
+                    contentDescription = "شعار التطبيق",
+                    modifier = Modifier
+                        .size(40.dp)
                         .clip(RoundedCornerShape(11.dp))
-                        .background(Brush.linearGradient(listOf(SdmColors.Violet, SdmColors.ElectricBlue, SdmColors.NeonCyan))),
-                    contentAlignment = Alignment.Center
-                ) { Text("▶", color = Color.White) }
+                )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Row {

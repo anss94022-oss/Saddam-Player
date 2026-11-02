@@ -8,4 +8,5 @@
     <color name="sdm_cyan">#22D3EE</color>
     <color name="sdm_silver">#E9EAF2</color>
     <color name="sdm_white">#FFFFFF</color>
+    <color name="sdm_launcher_bg">#05050A</color>
 </resources>
