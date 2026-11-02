@@ -74,6 +74,8 @@ fun LibraryScreen(
     onGrantPermission: () -> Unit,
     onVideoClick: (List<LibraryEntry>, Int, String) -> Unit,
     onVideoLongClick: (LibraryEntry) -> Unit,
+    selectionMode: Boolean = false,
+    selectedUris: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     var sortMenu by remember { mutableStateOf(false) }
@@ -229,8 +231,12 @@ fun LibraryScreen(
                 items(normal.size) { index ->
                     VideoGridCard(
                         entry = normal[index],
-                        onClick = { onVideoClick(normal, index, folderFilter ?: "كل الفيديوهات") },
-                        onLongClick = { onVideoLongClick(normal[index]) }
+                        onClick = {
+                            if (selectionMode) onVideoLongClick(normal[index])
+                            else onVideoClick(normal, index, folderFilter ?: "كل الفيديوهات")
+                        },
+                        onLongClick = { onVideoLongClick(normal[index]) },
+                        selected = normal[index].video.uri in selectedUris
                     )
                 }
                 if (hidden.isNotEmpty()) {
@@ -245,8 +251,12 @@ fun LibraryScreen(
                     items(hidden.size) { index ->
                         VideoGridCard(
                             entry = hidden[index],
-                            onClick = { onVideoClick(hidden, index, "المخفي") },
-                            onLongClick = { onVideoLongClick(hidden[index]) }
+                            onClick = {
+                                if (selectionMode) onVideoLongClick(hidden[index])
+                                else onVideoClick(hidden, index, "المخفي")
+                            },
+                            onLongClick = { onVideoLongClick(hidden[index]) },
+                            selected = hidden[index].video.uri in selectedUris
                         )
                     }
                 }
@@ -259,17 +269,27 @@ fun LibraryScreen(
                         VideoRow(
                             entry = entry,
                             onClick = {
-                                onVideoClick(state.resumeList, state.resumeList.indexOf(entry), "استكمال المشاهدة")
+                                if (selectionMode) onVideoLongClick(entry)
+                                else onVideoClick(
+                                    state.resumeList,
+                                    state.resumeList.indexOf(entry),
+                                    "استكمال المشاهدة"
+                                )
                             },
-                            onLongClick = { onVideoLongClick(entry) }
+                            onLongClick = { onVideoLongClick(entry) },
+                            selected = entry.video.uri in selectedUris
                         )
                     }
                 }
                 items(normal) { entry ->
                     VideoRow(
                         entry = entry,
-                        onClick = { onVideoClick(normal, normal.indexOf(entry), folderFilter ?: "كل الفيديوهات") },
-                        onLongClick = { onVideoLongClick(entry) }
+                        onClick = {
+                            if (selectionMode) onVideoLongClick(entry)
+                            else onVideoClick(normal, normal.indexOf(entry), folderFilter ?: "كل الفيديوهات")
+                        },
+                        onLongClick = { onVideoLongClick(entry) },
+                        selected = entry.video.uri in selectedUris
                     )
                 }
             }

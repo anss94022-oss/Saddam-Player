@@ -1,6 +1,7 @@
 package com.sdm.videoplayer.ui.common
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -18,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -133,16 +136,41 @@ fun VideoGridCard(
     entry: LibraryEntry,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    selected: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
+            .then(
+                if (selected) Modifier.border(2.dp, SdmColors.Violet, RoundedCornerShape(14.dp))
+                else Modifier
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         color = MaterialTheme.colorScheme.surface
     ) {
         Column {
-            ThumbnailBox(entry, Modifier.fillMaxWidth())
+            Box {
+                ThumbnailBox(entry, Modifier.fillMaxWidth())
+                if (selected) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SdmColors.Violet),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            "محدد",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
             Column(Modifier.padding(8.dp)) {
                 Text(
                     entry.video.title,
@@ -169,15 +197,28 @@ fun VideoRow(
     entry: LibraryEntry,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    selected: Boolean = false,
     trailing: @Composable (() -> Unit)? = null
 ) {
     Row(
         Modifier
             .fillMaxWidth()
+            .background(
+                if (selected) SdmColors.Violet.copy(alpha = 0.22f) else Color.Transparent
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (selected) {
+            Icon(
+                Icons.Default.CheckCircle,
+                "محدد",
+                tint = SdmColors.Violet,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+        }
         ThumbnailBox(entry, Modifier.width(132.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {

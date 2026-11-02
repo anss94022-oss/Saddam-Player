@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
             val vm: MainViewModel = viewModel()
             SideEffect { appViewModel = vm }
             val settings by vm.settings.collectAsStateWithLifecycle()
+            val state by vm.uiState.collectAsStateWithLifecycle()
             val incoming: Uri? by incomingUri
 
             var route by remember { mutableStateOf<Route>(Route.Home) }
@@ -137,19 +138,31 @@ class MainActivity : ComponentActivity() {
                                 onOpenQueue = { route = Route.Home }
                             )
 
-                            Route.Vertical -> VerticalFeedScreen(
-                                entries = verticalEntries,
-                                startIndex = verticalStart,
-                                favoriteUris = verticalEntries.filter { it.isFavorite }.map { it.video.uri }.toSet(),
-                                onExit = { route = Route.Home },
-                                onSaveProgress = { uri, pos, dur -> vm.saveProgress(uri, pos, dur) },
-                                onToggleFavorite = { v -> vm.toggleFavorite(v) },
-                                onOpenClassic = { index ->
-                                    queue = PlaybackQueue.of(verticalEntries.map { it.video }, index, "عمودي")
-                                    startPosition = verticalEntries.getOrNull(index)?.resumePosition ?: -1L
-                                    route = Route.Player
-                                }
-                            )
+                            Route.Vertical -> {
+                                // المفضلة تتحدّث مباشرة من حالة التطبيق (كانت نسخة ثابتة فلا يتغيّر القلب)
+                                val liveFavorites = state.entries
+                                    .filter { it.isFavorite }
+                                    .map { it.video.uri }
+                                    .toSet()
+                                VerticalFeedScreen(
+                                    entries = verticalEntries,
+                                    startIndex = verticalStart,
+                                    favoriteUris = liveFavorites,
+                                    onExit = { route = Route.Home },
+                                    onSaveProgress = { uri, pos, dur -> vm.saveProgress(uri, pos, dur) },
+                                    onToggleFavorite = { v -> vm.toggleFavorite(v) },
+                                    onDelete = { v ->
+                                        vm.deleteVideo(v) { ok ->
+                                            if (ok) route = Route.Home
+                                        }
+                                    },
+                                    onOpenClassic = { index ->
+                                        queue = PlaybackQueue.of(verticalEntries.map { it.video }, index, "عمودي")
+                                        startPosition = verticalEntries.getOrNull(index)?.resumePosition ?: -1L
+                                        route = Route.Player
+                                    }
+                                )
+                            }
                         }
                     }
                 }

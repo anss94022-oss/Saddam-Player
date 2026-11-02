@@ -168,6 +168,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** حذف عدة فيديوهات، ويُرجِع عدد الملفات التي رُفض حذفها. */
+    fun deleteVideos(videos: List<VideoItem>, onResult: (failed: Int) -> Unit) {
+        viewModelScope.launch {
+            var failed = 0
+            videos.forEach { video ->
+                val ok = runCatching { videoRepo.delete(video) }.getOrDefault(false)
+                if (!ok) failed++
+            }
+            refresh(force = true)
+            onResult(failed)
+        }
+    }
+
     fun renameVideo(video: VideoItem, newTitle: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             val ok = videoRepo.rename(video, newTitle)

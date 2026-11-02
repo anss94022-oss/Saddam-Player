@@ -25,12 +25,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.ViewCarousel
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -71,6 +78,7 @@ import com.sdm.videoplayer.ui.lists.PlaylistsScreen
 import com.sdm.videoplayer.ui.settings.SettingsScreen
 import com.sdm.videoplayer.ui.theme.SdmColors
 import com.sdm.videoplayer.util.openVideoWith
+import com.sdm.videoplayer.util.shareVideos
 import com.sdm.videoplayer.util.shareVideo
 import kotlinx.coroutines.launch
 
@@ -103,6 +111,9 @@ fun MainScreen(
     var renameText by remember { mutableStateOf("") }
     var showPlaylistPick by remember { mutableStateOf(false) }
     var snackbar by remember { mutableStateOf<String?>(null) }
+    var selection by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBulkDelete by remember { mutableStateOf(false) }
+    var showBulkPlaylist by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -161,7 +172,11 @@ fun MainScreen(
                 ).forEach { (t, icon) ->
                     NavigationBarItem(
                         selected = tab == t,
-                        onClick = { tab = t; detailPlaylist = null },
+                        onClick = {
+                            tab = t
+                            detailPlaylist = null
+                            selection = emptySet()
+                        },
                         icon = { Icon(icon, t.label) },
                         label = { Text(t.label, style = MaterialTheme.typography.labelSmall) }
                     )
@@ -200,6 +215,35 @@ fun MainScreen(
                 }
             }
 
+            val selectedEntries = state.entries.filter { it.video.uri in selection }
+            if (selection.isNotEmpty()) {
+                SelectionBar(
+                    count = selection.size,
+                    onShare = {
+                        shareVideos(context, selectedEntries.map { it.video })
+                        selection = emptySet()
+                    },
+                    onDelete = { showBulkDelete = true },
+                    onPlaylist = { showBulkPlaylist = true },
+                    onHide = {
+                        selectedEntries.forEach { vm.toggleHidden(it.video, true) }
+                        snackbar = "تم إخفاء ${selection.size} فيديو"
+                        selection = emptySet()
+                    },
+                    onRename = {
+                        selectedEntries.singleOrNull()?.let {
+                            actionEntry = it
+                            renameText = it.video.title
+                            showRename = true
+                        }
+                    },
+                    onMore = {
+                        selectedEntries.singleOrNull()?.let { actionEntry = it }
+                    },
+                    onCancel = { selection = emptySet() }
+                )
+            }
+
             when {
                 tab == Tab.LIBRARY -> LibraryScreen(
                     state = state,
@@ -216,7 +260,12 @@ fun MainScreen(
                         )
                     },
                     onVideoClick = { list, index, title -> playList(list, index, title) },
-                    onVideoLongClick = { actionEntry = it }
+                    onVideoLongClick = { entry ->
+                        val uri = entry.video.uri
+                        selection = if (uri in selection) selection - uri else selection + uri
+                    },
+                    selectionMode = selection.isNotEmpty(),
+                    selectedUris = selection
                 )
 
                 tab == Tab.VERTICAL -> {
@@ -423,6 +472,57 @@ fun MainScreen(
         )
     }
 
+    if (showBulkDelete) {
+        AlertDialog(
+            onDismissRequest = { showBulkDelete = false },
+            title = { Text("حذف ${selection.size} فيديو") },
+            text = { Text("سيتم حذف الملفات نهائيًا من الجهاز. لا يمكن التراجع عن الحذف.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val items = state.entries
+                        .filter { it.video.uri in selection }
+                        .map { it.video }
+                    showBulkDelete = false
+                    selection = emptySet()
+                    vm.deleteVideos(items) { failed ->
+                        snackbar = if (failed == 0) "تم حذف ${items.size} فيديو"
+                        else "تعذر حذف $failed ملف من ${items.size}"
+                    }
+                }) { Text("حذف", color = SdmColors.Magenta) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDelete = false }) { Text("إلغاء") }
+            }
+        )
+    }
+
+    if (showBulkPlaylist) {
+        val pickList = state.entries.filter { it.video.uri in selection }.map { it.video }
+        AlertDialog(
+            onDismissRequest = { showBulkPlaylist = false },
+            title = { Text("إضافة ${pickList.size} فيديو إلى قائمة") },
+            text = {
+                if (playlists.isEmpty()) {
+                    Text("لا توجد قوائم. أنشئ قائمة من تبويب القوائم.")
+                } else {
+                    Column {
+                        playlists.forEach { pl ->
+                            TextButton(onClick = {
+                                pickList.forEach { vm.addToPlaylist(pl.id, it) }
+                                snackbar = "أُضيف ${pickList.size} فيديو إلى ${pl.name}"
+                                showBulkPlaylist = false
+                                selection = emptySet()
+                            }) { Text(pl.name) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBulkPlaylist = false }) { Text("إغلاق") }
+            }
+        )
+    }
+
     snackbar?.let { msg ->
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.BottomCenter) {
             Text(
@@ -480,4 +580,54 @@ private fun VideoActionsDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
     )
+}
+
+@Composable
+private fun SelectionBar(
+    count: Int,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    onPlaylist: () -> Unit,
+    onHide: () -> Unit,
+    onRename: () -> Unit,
+    onMore: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(SdmColors.NightElevated)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onCancel) {
+            Icon(Icons.Default.Close, "إلغاء التحديد", tint = SdmColors.Silver)
+        }
+        Text(
+            "$count محدد",
+            color = SdmColors.Silver,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.weight(1f)
+        )
+        if (count == 1) {
+            IconButton(onClick = onRename) {
+                Icon(Icons.Default.Edit, "إعادة تسمية", tint = SdmColors.Silver)
+            }
+            IconButton(onClick = onMore) {
+                Icon(Icons.Default.MoreVert, "كل الإجراءات", tint = SdmColors.Silver)
+            }
+        }
+        IconButton(onClick = onShare) {
+            Icon(Icons.Default.Share, "مشاركة", tint = SdmColors.Silver)
+        }
+        IconButton(onClick = onPlaylist) {
+            Icon(Icons.Default.PlaylistAdd, "إضافة إلى قائمة", tint = SdmColors.Silver)
+        }
+        IconButton(onClick = onHide) {
+            Icon(Icons.Default.VisibilityOff, "إخفاء", tint = SdmColors.Silver)
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Default.Delete, "حذف", tint = SdmColors.Magenta)
+        }
+    }
 }

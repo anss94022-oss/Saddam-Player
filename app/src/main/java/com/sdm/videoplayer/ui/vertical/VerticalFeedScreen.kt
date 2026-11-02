@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,6 +79,7 @@ import com.sdm.videoplayer.service.PlaybackService
 import com.sdm.videoplayer.data.model.VideoItem
 import com.sdm.videoplayer.ui.theme.SdmColors
 import com.sdm.videoplayer.util.formatDuration
+import com.sdm.videoplayer.util.shareVideo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -94,7 +97,8 @@ fun VerticalFeedScreen(
     onExit: () -> Unit,
     onSaveProgress: (String, Long, Long) -> Unit,
     onToggleFavorite: (VideoItem) -> Unit,
-    onOpenClassic: (Int) -> Unit
+    onOpenClassic: (Int) -> Unit,
+    onDelete: (VideoItem) -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -121,6 +125,11 @@ fun VerticalFeedScreen(
     var sink by remember { mutableStateOf(false) }
     var zoomMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_ZOOM) }
     var endedSignal by remember { mutableIntStateOf(0) }
+    var showInfo by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    val currentEntry = entries.getOrNull(pagerState.currentPage)
+    val currentVideo = currentEntry?.video
 
     // مشغل نشط + مشغل ثانٍ للتهيئة المسبقة للفيديو التالي
     // لا تسمح بتشغيل صوت سابق من خدمة الخلفية أثناء التمرير العمودي.
@@ -276,74 +285,14 @@ fun VerticalFeedScreen(
                 .background(Brush.verticalGradient(listOf(Color(0x66000000), Color.Transparent, Color(0x99000000))))
         )
 
-        // معلومات الفيديو
-        Column(
-            Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 16.dp, end = 90.dp, bottom = 96.dp)
-        ) {
-            Text(
-                entries.getOrNull(pagerState.currentPage)?.video?.title ?: "",
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                entries.getOrNull(pagerState.currentPage)?.video?.folderLabel ?: "",
-                color = SdmColors.TextMuted,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "${pagerState.currentPage + 1} / ${entries.size}",
-                color = SdmColors.Violet,
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-
-        // أزرار جانبية
-        Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 12.dp, bottom = 96.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            val current = entries.getOrNull(pagerState.currentPage)?.video
-            IconButton(onClick = { current?.let(onToggleFavorite) }) {
-                Icon(
-                    if (current != null && current.uri in favoriteUris) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    "مفضلة",
-                    tint = if (current != null && current.uri in favoriteUris) SdmColors.Magenta else Color.White
-                )
-            }
-            IconButton(onClick = {
-                sink = !sink
-                activePlayer.volume = if (sink) 0f else 1f
-            }) {
-                Text(if (sink) "🔇" else "🔊", fontSize = 20.sp)
-            }
-            IconButton(onClick = { onOpenClassic(pagerState.currentPage) }) {
-                Icon(Icons.Default.Tv, "المشغل التقليدي", tint = Color.White)
-            }
-            IconButton(onClick = {
-                entries.getOrNull(pagerState.currentPage)?.let {
-                    errorText = null
-                    activePlayer.seekTo(0)
-                }
-            }) { Icon(Icons.Default.Info, "من البداية", tint = Color.White) }
-        }
-
-        // عناصر التحكم
         AnimatedVisibility(
             visible = controlsVisible,
             enter = fadeIn(), exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
         ) {
-            Box(Modifier.fillMaxSize().background(Color(0x33000000))) {
+            Box(Modifier.fillMaxSize()) {
+
+                // الشريط العلوي
                 Row(
                     Modifier.align(Alignment.TopStart).fillMaxWidth().padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -361,46 +310,102 @@ fun VerticalFeedScreen(
                         zoomMode = if (zoomMode == AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
                             AspectRatioFrameLayout.RESIZE_MODE_FIT
                         else AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    }) { Text(if (zoomMode == AspectRatioFrameLayout.RESIZE_MODE_ZOOM) "قص" else "ملاءمة", color = Color.White, fontSize = 12.sp) }
+                    }) {
+                        Text(
+                            if (zoomMode == AspectRatioFrameLayout.RESIZE_MODE_ZOOM) "قص" else "ملاءمة",
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
 
-                Row(
-                    Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // زر التشغيل/الإيقاف فقط — التنقل بين الفيديوهات بالتمرير
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(listOf(SdmColors.Violet, SdmColors.ElectricBlue))),
+                    contentAlignment = Alignment.Center
                 ) {
                     IconButton(onClick = {
-                        if (pagerState.currentPage > 0) {
-                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
-                        }
-                    }) { Icon(Icons.Default.SkipPrevious, "السابق", tint = Color.White, modifier = Modifier.size(36.dp)) }
-
-                    Box(
-                        Modifier
-                            .size(60.dp)
-                            .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(SdmColors.Violet, SdmColors.ElectricBlue))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        IconButton(onClick = {
-                            if (activePlayer.isPlaying) activePlayer.pause() else activePlayer.play()
-                        }) {
-                            Icon(
-                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                "تشغيل/إيقاف",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
+                        if (activePlayer.isPlaying) activePlayer.pause() else activePlayer.play()
+                    }) {
+                        Icon(
+                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            "تشغيل/إيقاف",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
                     }
-
-                    IconButton(onClick = {
-                        if (pagerState.currentPage < entries.lastIndex) {
-                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                        }
-                    }) { Icon(Icons.Default.SkipNext, "التالي", tint = Color.White, modifier = Modifier.size(36.dp)) }
                 }
 
+                // معلومات الفيديو
+                Column(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, end = 90.dp, bottom = 110.dp)
+                ) {
+                    Text(
+                        currentVideo?.title ?: "",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        currentVideo?.folderLabel ?: "",
+                        color = SdmColors.TextMuted,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "${pagerState.currentPage + 1} / ${entries.size}",
+                        color = SdmColors.Violet,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+
+                // أزرار جانبية (تختفي مع بقية الأزرار)
+                Column(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 110.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    IconButton(onClick = { currentVideo?.let(onToggleFavorite) }) {
+                        Icon(
+                            if (currentVideo != null && currentVideo.uri in favoriteUris)
+                                Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            "مفضلة",
+                            tint = if (currentVideo != null && currentVideo.uri in favoriteUris)
+                                SdmColors.Magenta else Color.White
+                        )
+                    }
+                    IconButton(onClick = {
+                        sink = !sink
+                        activePlayer.volume = if (sink) 0f else 1f
+                    }) {
+                        Text(if (sink) "🔇" else "🔊", fontSize = 20.sp)
+                    }
+                    IconButton(onClick = { onOpenClassic(pagerState.currentPage) }) {
+                        Icon(Icons.Default.Tv, "المشغل التقليدي", tint = Color.White)
+                    }
+                    IconButton(onClick = { showInfo = true }) {
+                        Icon(Icons.Default.Info, "معلومات الفيديو", tint = Color.White)
+                    }
+                    IconButton(onClick = { currentVideo?.let { shareVideo(context, it) } }) {
+                        Icon(Icons.Default.Share, "مشاركة", tint = Color.White)
+                    }
+                    IconButton(onClick = { showDeleteConfirm = true }) {
+                        Icon(Icons.Default.Delete, "حذف", tint = Color.White)
+                    }
+                }
+
+                // شريط التقدم
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp)
                 ) {
@@ -429,6 +434,32 @@ fun VerticalFeedScreen(
                     )
                 }
             }
+        }
+
+        if (showInfo && currentVideo != null) {
+            com.sdm.videoplayer.ui.player.VideoInfoDialog(
+                video = currentVideo,
+                onDismiss = { showInfo = false }
+            )
+        }
+
+        if (showDeleteConfirm) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                title = { Text("حذف الفيديو") },
+                text = { Text("سيتم حذف الملف نهائيًا من الجهاز. لا يمكن التراجع.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        showDeleteConfirm = false
+                        currentVideo?.let { onDelete(it) }
+                    }) { Text("حذف", color = SdmColors.Magenta) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { showDeleteConfirm = false }) {
+                        Text("إلغاء")
+                    }
+                }
+            )
         }
 
         errorText?.let { err ->

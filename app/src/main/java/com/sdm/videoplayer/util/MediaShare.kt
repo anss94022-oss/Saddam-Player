@@ -39,6 +39,42 @@ fun shareVideo(context: Context, video: VideoItem): Boolean {
     }
 }
 
+/** مشاركة عدة فيديوهات مرة واحدة عبر Android Sharesheet. */
+fun shareVideos(context: Context, videos: List<VideoItem>): Boolean {
+    if (videos.isEmpty()) return false
+    if (videos.size == 1) return shareVideo(context, videos.first())
+
+    val uris = ArrayList(videos.map { it.contentUri })
+    val mime = if (videos.map { it.mimeType }.distinct().size == 1) {
+        videos.first().mimeType.ifBlank { "video/*" }
+    } else {
+        "video/*"
+    }
+
+    val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+        type = mime
+        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        putExtra(Intent.EXTRA_TITLE, "${videos.size} فيديوهات")
+        clipData = ClipData.newRawUri(
+            "${videos.size} videos",
+            uris.first()
+        ).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    return runCatching {
+        val chooser = Intent.createChooser(shareIntent, context.getString(R.string.share))
+        if (context !is android.app.Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+        true
+    }.getOrElse {
+        toast(context, context.getString(R.string.share_failed))
+        false
+    }
+}
+
 /** فتح الفيديو بتطبيق آخر (View) مع منح صلاحية القراءة. */
 fun openVideoWith(context: Context, video: VideoItem): Boolean = runCatching {
     val intent = Intent(Intent.ACTION_VIEW)

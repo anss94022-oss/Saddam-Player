@@ -2,6 +2,7 @@ package com.sdm.videoplayer.ui.player
 
 import android.app.Activity
 import android.app.PictureInPictureParams
+import android.content.pm.ActivityInfo
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -221,6 +223,18 @@ fun PlayerScreen(
         }
     }
 
+    // زر التدوير: يبدّل بين أفقي ورأسي يدويًا بدل الاعتماد على حساس الجهاز فقط.
+    fun toggleOrientation() {
+        val act = activity ?: return
+        val isLandscape =
+            act.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        act.requestedOrientation = if (isLandscape) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
+
     // الخروج من المشغل: يحفظ الموضع، وينقل التشغيل إلى الخدمة إذا كان «الصوت في الخلفية» مفعّلًا.
     fun leavePlayer() {
         onSaveProgress(current?.uri ?: "", player.currentPosition, durationMs)
@@ -373,6 +387,8 @@ fun PlayerScreen(
     // إعداد ملء الشاشة وأشرطة النظام
     DisposableEffect(Unit) {
         val window = activity?.window
+        // السماح بالتدوير حتى لو كان «تدوير تلقائي» مغلقًا في النظام.
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         if (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
             WindowInsetsControllerCompat(window, view).apply {
@@ -382,6 +398,7 @@ fun PlayerScreen(
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (window != null) {
                 WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -867,6 +884,13 @@ fun PlayerScreen(
                                 },
                                 color = if (repeatMode == RepeatMode.OFF) SdmColors.TextMuted else SdmColors.Violet,
                                 fontSize = 11.sp
+                            )
+                        }
+                        IconButton(onClick = { toggleOrientation() }) {
+                            Icon(
+                                Icons.Default.ScreenRotation,
+                                "تدوير الشاشة",
+                                tint = Color.White
                             )
                         }
                         IconButton(onClick = {
